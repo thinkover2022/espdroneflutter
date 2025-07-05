@@ -1,0 +1,129 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Flutter Debug",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--debug"
+            ],
+            "console": "debugConsole",
+            "vmAdditionalArgs": [
+                "--enable-vm-service"
+            ]
+        },
+        {
+            "name": "Flutter Release",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--release"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Flutter Profile",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--profile"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Flutter Debug - Android",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--debug",
+                "-d", "android"
+            ],
+            "console": "debugConsole",
+            "vmAdditionalArgs": [
+                "--enable-vm-service"
+            ]
+        },
+        {
+            "name": "Flutter Release - Android",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--release",
+                "-d", "android"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Flutter Debug - Web",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--debug",
+                "-d", "web-server",
+                "--web-port", "8080"
+            ],
+            "console": "debugConsole",
+            "vmAdditionalArgs": [
+                "--enable-vm-service"
+            ]
+        },
+        {
+            "name": "Flutter Release - Web",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--release",
+                "-d", "web-server",
+                "--web-port", "8080"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Flutter Debug - Windows",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--debug",
+                "-d", "windows"
+            ],
+            "console": "debugConsole",
+            "vmAdditionalArgs": [
+                "--enable-vm-service"
+            ]
+        },
+        {
+            "name": "Flutter Release - Windows",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--release",
+                "-d", "windows"
+            ],
+            "console": "debugConsole"
+        },
+        {
+            "name": "Flutter Debug with Hot Reload",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--debug",
+                "--hot"
+            ],
+            "console": "debugConsole",
+            "vmAdditionalArgs": [
+                "--enable-vm-service"
+            ]
+        }
+    ]
+}

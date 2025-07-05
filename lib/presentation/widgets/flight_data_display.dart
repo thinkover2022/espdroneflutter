@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:espdroneflutter/presentation/cubit/flight_control_cubit.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:espdroneflutter/presentation/providers/flight_control_provider.dart';
 
-class FlightDataDisplay extends StatelessWidget {
+class FlightDataDisplay extends ConsumerWidget {
   const FlightDataDisplay({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<FlightControlCubit, FlightData>(
-      builder: (context, flightData) {
-        return Container(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final flightData = ref.watch(flightControlProvider);
+    return Container(
           padding: const EdgeInsets.all(16.0),
           decoration: BoxDecoration(
             color: Colors.black.withValues(alpha: 0.8),
@@ -65,8 +64,6 @@ class FlightDataDisplay extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
   }
 
   Widget _buildDataItem(String label, double value, String unit) {
@@ -93,14 +90,13 @@ class FlightDataDisplay extends StatelessWidget {
   }
 }
 
-class FlightDataPanel extends StatelessWidget {
+class FlightDataPanel extends ConsumerWidget {
   const FlightDataPanel({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<FlightControlCubit, FlightData>(
-      builder: (context, flightData) {
-        return Container(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final flightData = ref.watch(flightControlProvider);
+    return Container(
           height: 100.0,
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           decoration: BoxDecoration(
@@ -117,8 +113,6 @@ class FlightDataPanel extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
   }
 
   Widget _buildMiniDataItem(String label, double value, Color color) {
@@ -146,14 +140,13 @@ class FlightDataPanel extends StatelessWidget {
   }
 }
 
-class FlightStatusIndicator extends StatelessWidget {
+class FlightStatusIndicator extends ConsumerWidget {
   const FlightStatusIndicator({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<FlightControlCubit, FlightData>(
-      builder: (context, flightData) {
-        return Container(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final flightData = ref.watch(flightControlProvider);
+    return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
           decoration: BoxDecoration(
             color: flightData.isFlying ? Colors.green : Colors.red,
@@ -179,7 +172,5 @@ class FlightStatusIndicator extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
   }
 }

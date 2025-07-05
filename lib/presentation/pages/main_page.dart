@@ -41,80 +41,79 @@ class _MainPageState extends ConsumerState<MainPage> {
         ],
       ),
       body: Consumer(
-        builder: (context, ref, child) {
-          ref.listen<DroneConnectionState>(droneConnectionProvider, (previous, next) {
-            if (next is DroneConnected) {
-              _startFlightControl();
-            } else if (next is DroneDisconnected) {
-              _stopFlightControl();
-            }
-          });
-          return child!;
-        },
-        child:
-        child: SafeArea(
-          child: Column(
-            children: [
-              // Flight data display and control buttons at top
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    const FlightDataPanel(),
-                    const SizedBox(height: 16.0),
-                    // Control buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        ElevatedButton(
-                          onPressed: _emergencyStop,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                              vertical: 12.0,
+          builder: (context, ref, child) {
+            ref.listen<DroneConnectionState>(droneConnectionProvider,
+                (previous, next) {
+              if (next is DroneConnected) {
+                _startFlightControl();
+              } else if (next is DroneDisconnected) {
+                _stopFlightControl();
+              }
+            });
+            return child!;
+          },
+          child: SafeArea(
+            child: Column(
+              children: [
+                // Flight data display and control buttons at top
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      const FlightDataPanel(),
+                      const SizedBox(height: 16.0),
+                      // Control buttons
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          ElevatedButton(
+                            onPressed: _emergencyStop,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                                vertical: 12.0,
+                              ),
                             ),
+                            child: const Text('EMERGENCY STOP'),
                           ),
-                          child: const Text('EMERGENCY STOP'),
-                        ),
-                        const FlightStatusIndicator(),
-                        ElevatedButton(
-                          onPressed: _takeoffLand,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16.0,
-                              vertical: 12.0,
+                          const FlightStatusIndicator(),
+                          ElevatedButton(
+                            onPressed: _takeoffLand,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16.0,
+                                vertical: 12.0,
+                              ),
                             ),
+                            child: const Text('TAKEOFF/LAND'),
                           ),
-                          child: const Text('TAKEOFF/LAND'),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              // Main flight control area - responsive layout
-              Expanded(
-                child: OrientationBuilder(
-                  builder: (context, orientation) {
-                    return _buildJoystickLayout(orientation);
-                  },
+                // Main flight control area - responsive layout
+                Expanded(
+                  child: OrientationBuilder(
+                    builder: (context, orientation) {
+                      return _buildJoystickLayout(orientation);
+                    },
+                  ),
                 ),
-              ),
-            ],
-          ),
-        )
-      ),
+              ],
+            ),
+          )),
     );
   }
 
   Widget _buildJoystickLayout(Orientation orientation) {
     final screenSize = MediaQuery.of(context).size;
-    final joystickSize = orientation == Orientation.landscape 
+    final joystickSize = orientation == Orientation.landscape
         ? (screenSize.height * 0.25).clamp(120.0, 200.0)
         : (screenSize.width * 0.35).clamp(140.0, 220.0);
 
