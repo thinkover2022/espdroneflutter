@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:espdroneflutter/presentation/cubit/drone_connection_cubit.dart';
-import 'package:espdroneflutter/presentation/cubit/flight_control_cubit.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:espdroneflutter/presentation/providers/drone_connection_provider.dart';
+import 'package:espdroneflutter/presentation/providers/flight_control_provider.dart';
 import 'package:espdroneflutter/presentation/widgets/virtual_joystick.dart';
 import 'package:espdroneflutter/presentation/widgets/flight_data_display.dart';
 
-class MainPage extends StatefulWidget {
+class MainPage extends ConsumerStatefulWidget {
   const MainPage({super.key});
 
   @override
-  State<MainPage> createState() => _MainPageState();
+  ConsumerState<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends ConsumerState<MainPage> {
   double _leftJoystickX = 0.0;
   double _leftJoystickY = 0.0;
   double _rightJoystickX = 0.0;
@@ -26,8 +26,9 @@ class _MainPageState extends State<MainPage> {
         title: const Text('ESP-Drone Controller'),
         backgroundColor: Colors.grey[900],
         actions: [
-          BlocBuilder<DroneConnectionCubit, DroneConnectionState>(
-            builder: (context, state) {
+          Consumer(
+            builder: (context, ref, child) {
+              final state = ref.watch(droneConnectionProvider);
               return IconButton(
                 icon: Icon(
                   state is DroneConnected ? Icons.wifi : Icons.wifi_off,
@@ -39,14 +40,18 @@ class _MainPageState extends State<MainPage> {
           ),
         ],
       ),
-      body: BlocListener<DroneConnectionCubit, DroneConnectionState>(
-        listener: (context, state) {
-          if (state is DroneConnected) {
-            _startFlightControl();
-          } else if (state is DroneDisconnected) {
-            _stopFlightControl();
-          }
+      body: Consumer(
+        builder: (context, ref, child) {
+          ref.listen<DroneConnectionState>(droneConnectionProvider, (previous, next) {
+            if (next is DroneConnected) {
+              _startFlightControl();
+            } else if (next is DroneDisconnected) {
+              _stopFlightControl();
+            }
+          });
+          return child!;
         },
+        child:
         child: SafeArea(
           child: Column(
             children: [
@@ -102,7 +107,7 @@ class _MainPageState extends State<MainPage> {
               ),
             ],
           ),
-        ),
+        )
       ),
     );
   }
@@ -237,7 +242,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _updateFlightControls() {
-    context.read<FlightControlCubit>().updateAllControls(
+    ref.read(flightControlProvider.notifier).updateAllControls(
           _rightJoystickX, // Roll
           _rightJoystickY, // Pitch
           _leftJoystickX, // Yaw
@@ -246,7 +251,7 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _emergencyStop() {
-    context.read<FlightControlCubit>().emergencyStop();
+    ref.read(flightControlProvider.notifier).emergencyStop();
     setState(() {
       _leftJoystickX = 0.0;
       _leftJoystickY = 0.0;
@@ -256,31 +261,32 @@ class _MainPageState extends State<MainPage> {
   }
 
   void _takeoffLand() {
-    final flightCubit = context.read<FlightControlCubit>();
-    if (flightCubit.state.isFlying) {
+    final flightNotifier = ref.read(flightControlProvider.notifier);
+    final flightState = ref.read(flightControlProvider);
+    if (flightState.isFlying) {
       // Land
-      flightCubit.updateThrust(0.0);
+      flightNotifier.updateThrust(0.0);
     } else {
       // Takeoff
-      flightCubit.updateThrust(0.5);
+      flightNotifier.updateThrust(0.5);
     }
   }
 
   void _startFlightControl() {
-    final connectionCubit = context.read<DroneConnectionCubit>();
-    final flightCubit = context.read<FlightControlCubit>();
+    final connectionNotifier = ref.read(droneConnectionProvider.notifier);
+    final flightNotifier = ref.read(flightControlProvider.notifier);
 
-    flightCubit.startCommandLoop((packet) {
-      if (connectionCubit.udpDriver != null) {
-        connectionCubit.udpDriver!.sendPacket(packet);
-      } else if (connectionCubit.bleDriver != null) {
-        connectionCubit.bleDriver!.sendPacket(packet);
+    flightNotifier.startCommandLoop((packet) {
+      if (connectionNotifier.udpDriver != null) {
+        connectionNotifier.udpDriver!.sendPacket(packet);
+      } else if (connectionNotifier.bleDriver != null) {
+        connectionNotifier.bleDriver!.sendPacket(packet);
       }
     });
   }
 
   void _stopFlightControl() {
-    context.read<FlightControlCubit>().stopCommandLoop();
+    ref.read(flightControlProvider.notifier).stopCommandLoop();
   }
 
   void _showConnectionDialog(BuildContext context) {
@@ -291,8 +297,9 @@ class _MainPageState extends State<MainPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            BlocBuilder<DroneConnectionCubit, DroneConnectionState>(
-              builder: (context, state) {
+            Consumer(
+              builder: (context, ref, child) {
+                final state = ref.watch(droneConnectionProvider);
                 String statusText = 'Disconnected';
                 Color statusColor = Colors.red;
 
@@ -321,21 +328,21 @@ class _MainPageState extends State<MainPage> {
         actions: [
           TextButton(
             onPressed: () {
-              context.read<DroneConnectionCubit>().connectUdp();
+              ref.read(droneConnectionProvider.notifier).connectUdp();
               Navigator.of(context).pop();
             },
             child: const Text('Connect UDP'),
           ),
           TextButton(
             onPressed: () {
-              context.read<DroneConnectionCubit>().connectBle();
+              ref.read(droneConnectionProvider.notifier).connectBle();
               Navigator.of(context).pop();
             },
             child: const Text('Connect BLE'),
           ),
           TextButton(
             onPressed: () {
-              context.read<DroneConnectionCubit>().disconnect();
+              ref.read(droneConnectionProvider.notifier).disconnect();
               Navigator.of(context).pop();
             },
             child: const Text('Disconnect'),
