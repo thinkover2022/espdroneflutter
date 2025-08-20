@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:espdroneflutter/presentation/providers/drone_connection_provider.dart';
 import 'package:espdroneflutter/presentation/providers/flight_control_provider.dart';
+import 'package:espdroneflutter/presentation/providers/high_level_commander_provider.dart';
 import 'package:espdroneflutter/presentation/widgets/virtual_joystick.dart';
 import 'package:espdroneflutter/presentation/widgets/flight_data_display.dart';
+import 'package:espdroneflutter/presentation/widgets/high_level_controls.dart';
 
 class MainPage extends ConsumerStatefulWidget {
   const MainPage({super.key});
@@ -46,8 +48,10 @@ class _MainPageState extends ConsumerState<MainPage> {
                 (previous, next) {
               if (next is DroneConnected) {
                 _startFlightControl();
+                _initializeHighLevelCommander();
               } else if (next is DroneDisconnected) {
                 _stopFlightControl();
+                _disposeHighLevelCommander();
               }
             });
             return child!;
@@ -61,6 +65,9 @@ class _MainPageState extends ConsumerState<MainPage> {
                   child: Column(
                     children: [
                       const FlightDataPanel(),
+                      const SizedBox(height: 16.0),
+                      // High-level controls
+                      const HighLevelControlsWidget(),
                       const SizedBox(height: 16.0),
                       // Control buttons
                       Row(
@@ -286,6 +293,24 @@ class _MainPageState extends ConsumerState<MainPage> {
 
   void _stopFlightControl() {
     ref.read(flightControlProvider.notifier).stopCommandLoop();
+  }
+
+  void _initializeHighLevelCommander() {
+    final connectionNotifier = ref.read(droneConnectionProvider.notifier);
+    final hlCommander = ref.read(highLevelCommanderProvider.notifier);
+
+    // Initialize with a packet sender function
+    hlCommander.initialize((packet) {
+      if (connectionNotifier.udpDriver != null) {
+        connectionNotifier.udpDriver!.sendPacket(packet);
+      } else if (connectionNotifier.bleDriver != null) {
+        connectionNotifier.bleDriver!.sendPacket(packet);
+      }
+    });
+  }
+
+  void _disposeHighLevelCommander() {
+    ref.read(highLevelCommanderProvider.notifier).dispose();
   }
 
   void _showConnectionDialog(BuildContext context) {

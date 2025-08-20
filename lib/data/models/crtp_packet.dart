@@ -7,6 +7,7 @@ enum CrtpPort {
   mem(0x04),
   logging(0x05),
   locSrv(0x06),
+  setpointHl(0x08),    // High-level commander port
   platform(0x0D),
   clientSide(0x0E),
   linkctrl(0x0F),
