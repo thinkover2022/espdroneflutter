@@ -61,7 +61,7 @@ flutter build macos
 ## Architecture
 
 ### Core Architecture Pattern
-- **BLoC Pattern**: Uses flutter_bloc for state management
+- **Riverpod Pattern**: Uses flutter_riverpod with StateNotifier for state management
 - **Driver Pattern**: Communication drivers for UDP and BLE protocols
 - **CRTP Protocol**: Crazy Real-Time Protocol for drone communication
 

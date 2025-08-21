@@ -109,6 +109,12 @@ coverage/
 *.jks
 android/app/src/main/java/io/flutter/plugins/
 
+# Android NDK related
+**/android/app/.cxx/
+**/android/**/build/
+**/android/**/CMakeCache.txt
+**/android/**/cmake_install.cmake
+
 # Firebase
 **/android/app/google-services.json
 **/ios/Runner/GoogleService-Info.plist

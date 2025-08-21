@@ -76,9 +76,13 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
     final center = Offset(widget.size / 2, widget.size / 2);
     final delta = details.localPosition - center;
 
+    // 실제 계산된 크기를 사용하여 제한
+    final actualBaseRadius = (widget.size / 2) - 2.0;
+    final actualKnobRadius = actualBaseRadius * 0.3;
+
     // Constrain movement within the base circle
     final distance =
-        math.min(delta.distance, widget.baseRadius - widget.knobRadius);
+        math.min(delta.distance, actualBaseRadius - actualKnobRadius);
     final angle = math.atan2(delta.dy, delta.dx);
 
     Offset newPosition = Offset(
@@ -103,11 +107,11 @@ class _VirtualJoystickState extends State<VirtualJoystick> {
       _knobPosition = newPosition;
     });
 
-    // Normalize position to -1.0 to 1.0 range
+    // Normalize position to -1.0 to 1.0 range - 실제 크기 사용
     final normalizedX =
-        _knobPosition.dx / (widget.baseRadius - widget.knobRadius);
+        _knobPosition.dx / (actualBaseRadius - actualKnobRadius);
     final normalizedY =
-        -_knobPosition.dy / (widget.baseRadius - widget.knobRadius); // Invert Y
+        -_knobPosition.dy / (actualBaseRadius - actualKnobRadius); // Invert Y
 
     widget.onChanged(normalizedX, normalizedY);
   }
@@ -143,6 +147,10 @@ class JoystickPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
+    // 사각형에 밀착하도록 반지름을 사각형 크기의 절반으로 설정
+    final actualBaseRadius = (size.width / 2) - 2.0; // stroke 여유 공간
+    final actualKnobRadius = actualBaseRadius * 0.3; // base 대비 30% 크기
+    
     final basePaint = Paint()
       ..color = baseColor
       ..style = PaintingStyle.fill;
@@ -161,9 +169,9 @@ class JoystickPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    // Draw base circle
-    canvas.drawCircle(center, baseRadius, basePaint);
-    canvas.drawCircle(center, baseRadius, baseStrokePaint);
+    // Draw base circle - 실제 계산된 크기로 그리기
+    canvas.drawCircle(center, actualBaseRadius, basePaint);
+    canvas.drawCircle(center, actualBaseRadius, baseStrokePaint);
 
     // Draw center crosshair
     final crosshairPaint = Paint()
@@ -182,10 +190,10 @@ class JoystickPainter extends CustomPainter {
       crosshairPaint,
     );
 
-    // Draw knob
+    // Draw knob - 실제 계산된 크기 사용
     final knobCenter = center + knobPosition;
-    canvas.drawCircle(knobCenter, knobRadius, knobPaint);
-    canvas.drawCircle(knobCenter, knobRadius, knobStrokePaint);
+    canvas.drawCircle(knobCenter, actualKnobRadius, knobPaint);
+    canvas.drawCircle(knobCenter, actualKnobRadius, knobStrokePaint);
 
     // Draw knob indicator
     if (isActive) {

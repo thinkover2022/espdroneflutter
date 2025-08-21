@@ -1,4 +1,4 @@
-package com.example.espdroneflutter
+package com.espressif.espdroneflutter
 
 import io.flutter.embedding.android.FlutterActivity
 

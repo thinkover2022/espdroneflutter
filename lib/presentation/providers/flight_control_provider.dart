@@ -196,8 +196,15 @@ class FlightControlNotifier extends StateNotifier<FlightData> {
   void startCommandLoop(Function(CommanderPacket) sendCommand) {
     _commandTimer?.cancel();
     _commandTimer = Timer.periodic(const Duration(milliseconds: 20), (timer) {
-      final packet = generateCommanderPacket();
-      sendCommand(packet);
+      try {
+        final packet = generateCommanderPacket();
+        sendCommand(packet);
+      } catch (e) {
+        print('Error in command loop: $e');
+        // 연결이 끊어진 경우 안전하게 정지
+        emergencyStop();
+        stopCommandLoop();
+      }
     });
   }
 

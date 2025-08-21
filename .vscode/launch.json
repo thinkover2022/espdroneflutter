@@ -40,9 +40,7 @@
             "type": "dart",
             "program": "lib/main.dart",
             "args": [
-                "--debug",
-                "-d",
-                "SM S921N"
+                "--debug"
             ],
             "console": "debugConsole",
             "vmAdditionalArgs": [

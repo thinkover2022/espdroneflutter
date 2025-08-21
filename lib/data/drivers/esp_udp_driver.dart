@@ -16,6 +16,9 @@ class EspUdpDriver {
 
   bool _isConnected = false;
   Timer? _heartbeatTimer;
+  Timer? _connectionCheckTimer;
+  DateTime? _lastPacketReceived;
+  static const Duration _connectionTimeout = Duration(seconds: 5);
 
   Stream<CrtpPacket> get incomingPackets => _incomingController.stream;
   Stream<bool> get connectionState => _connectionStateController.stream;
@@ -32,6 +35,12 @@ class EspUdpDriver {
 
       // Start heartbeat to maintain connection
       _startHeartbeat();
+      
+      // Start connection monitoring
+      _startConnectionMonitoring();
+      
+      // Initialize last packet time
+      _lastPacketReceived = DateTime.now();
 
       print('UDP connection established on port $_localPort');
     } catch (e) {
@@ -46,6 +55,8 @@ class EspUdpDriver {
     _socket = null;
     _isConnected = false;
     _heartbeatTimer?.cancel();
+    _connectionCheckTimer?.cancel();
+    _lastPacketReceived = null;
     if (!_connectionStateController.isClosed) {
       _connectionStateController.add(false);
     }
@@ -54,20 +65,29 @@ class EspUdpDriver {
 
   void sendPacket(CrtpPacket packet) {
     if (!_isConnected || _socket == null) {
-      throw StateError('Not connected');
+      print('Warning: Attempted to send packet while not connected');
+      return; // StateError 대신 조용히 리턴
     }
 
     try {
       final packetBytes = packet.toBytes();
       final checksummedPacket = _addChecksum(packetBytes);
 
-      _socket!.send(
+      final bytesSent = _socket!.send(
         checksummedPacket,
         InternetAddress(_targetIp),
         _targetPort,
       );
+      
+      // 전송 실패 감지
+      if (bytesSent == 0) {
+        print('Failed to send packet - 0 bytes sent');
+        _handleConnectionLost();
+      }
     } catch (e) {
       print('Error sending packet: $e');
+      // 네트워크 오류로 인한 연결 끊김 처리
+      _handleConnectionLost();
     }
   }
 
@@ -76,6 +96,9 @@ class EspUdpDriver {
       final datagram = _socket!.receive();
       if (datagram != null) {
         try {
+          // 패킷 수신 시간 업데이트
+          _lastPacketReceived = DateTime.now();
+          
           final packet = _parsePacket(datagram.data);
           if (packet != null) {
             _incomingController.add(packet);
@@ -130,6 +153,40 @@ class EspUdpDriver {
         sendPacket(heartbeat);
       }
     });
+  }
+  
+  void _startConnectionMonitoring() {
+    _connectionCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_isConnected && _lastPacketReceived != null) {
+        final timeSinceLastPacket = DateTime.now().difference(_lastPacketReceived!);
+        
+        if (timeSinceLastPacket > _connectionTimeout) {
+          print('Connection timeout detected - no packets received for ${timeSinceLastPacket.inSeconds}s');
+          _handleConnectionLost();
+        }
+      }
+    });
+  }
+  
+  void _handleConnectionLost() {
+    if (_isConnected) {
+      print('Connection lost - cleaning up');
+      _isConnected = false;
+      _connectionStateController.add(false);
+      
+      // 소켓을 안전하게 정리
+      try {
+        _socket?.close();
+      } catch (e) {
+        print('Error closing socket: $e');
+      }
+      _socket = null;
+      
+      // 타이머들 정리
+      _heartbeatTimer?.cancel();
+      _connectionCheckTimer?.cancel();
+      _lastPacketReceived = null;
+    }
   }
 
   void dispose() {

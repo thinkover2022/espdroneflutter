@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:equatable/equatable.dart';
 import 'package:espdroneflutter/data/services/high_level_commander_service.dart';
@@ -54,6 +55,7 @@ class HighLevelCommanderProviderState extends Equatable {
 class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProviderState> {
   StatefulHighLevelCommanderService? _service;
   Function(CrtpPacket)? _packetSender;
+  StreamSubscription? _incomingPacketSubscription;
 
   HighLevelCommanderNotifier() : super(HighLevelCommanderProviderState.initial());
 
@@ -76,9 +78,15 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
 
     state = state.copyWith(isEnabled: true);
   }
+  
+  /// Process incoming CRTP packets for command responses
+  void processIncomingPacket(CrtpPacket packet) {
+    _service?.processIncomingPacket(packet);
+  }
 
   @override
   void dispose() {
+    _incomingPacketSubscription?.cancel();
     _service?.dispose();
     _service = null;
     _packetSender = null;
