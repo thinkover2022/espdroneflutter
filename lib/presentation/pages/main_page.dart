@@ -83,18 +83,29 @@ class _MainPageState extends ConsumerState<MainPage> {
           builder: (context, ref, child) {
             ref.listen<DroneConnectionState>(droneConnectionProvider,
                 (previous, next) {
+              // Check if widget is still mounted to avoid errors during disposal
+              if (!mounted) {
+                print('Widget not mounted, skipping connection state change');
+                return;
+              }
+              
               print('Connection state changed: $next');
-              if (next is DroneConnected) {
-                print('Drone connected - initializing controls');
-                _startFlightControl();
-                _initializeHighLevelCommander();
-                print('About to initialize telemetry...');
-                _initializeTelemetry();
-              } else if (next is DroneDisconnected) {
-                print('Drone disconnected - cleaning up controls');
-                _stopFlightControl();
-                _disposeHighLevelCommander();
-                _disposeTelemetry();
+              try {
+                if (next is DroneConnected) {
+                  print('Drone connected - initializing controls');
+                  _startFlightControl();
+                  _initializeHighLevelCommander();
+                  print('About to initialize telemetry...');
+                  _initializeTelemetry();
+                } else if (next is DroneDisconnected) {
+                  print('Drone disconnected - cleaning up controls');
+                  _stopFlightControl();
+                  _disposeHighLevelCommander();
+                  _disposeTelemetry();
+                }
+              } catch (e, stackTrace) {
+                print('Error handling connection state change: $e');
+                print('Stack trace: $stackTrace');
               }
             });
             return child!;
@@ -286,6 +297,8 @@ class _MainPageState extends ConsumerState<MainPage> {
   }
 
   void _initializeHighLevelCommander() {
+    if (!mounted) return;
+    
     print('Initializing High Level Commander...');
     final connectionNotifier = ref.read(droneConnectionProvider.notifier);
     final hlCommander = ref.read(highLevelCommanderProvider.notifier);
@@ -313,6 +326,8 @@ class _MainPageState extends ConsumerState<MainPage> {
   }
 
   void _initializeTelemetry() {
+    if (!mounted) return;
+    
     print('Initializing Telemetry...');
     final connectionNotifier = ref.read(droneConnectionProvider.notifier);
     final telemetryNotifier = ref.read(telemetryProvider.notifier);
@@ -365,16 +380,31 @@ class _MainPageState extends ConsumerState<MainPage> {
   }
 
   void _disposeHighLevelCommander() {
+    if (!mounted) return;
+    
     print('Disposing High Level Commander...');
-    ref.read(highLevelCommanderProvider.notifier).dispose();
+    try {
+      // Use invalidate instead of dispose to allow reinitialization
+      ref.invalidate(highLevelCommanderProvider);
+    } catch (e) {
+      print('Error disposing high level commander: $e');
+    }
   }
   
   void _disposeTelemetry() {
     print('Disposing Telemetry...');
-    // Cancel packet subscription safely
-    _incomingPacketSubscription?.cancel();
-    _incomingPacketSubscription = null;
-    ref.read(telemetryProvider.notifier).dispose();
+    try {
+      // Cancel packet subscription safely
+      _incomingPacketSubscription?.cancel();
+      _incomingPacketSubscription = null;
+      
+      if (mounted) {
+        // Use invalidate instead of dispose to allow reinitialization
+        ref.invalidate(telemetryProvider);
+      }
+    } catch (e) {
+      print('Error disposing telemetry: $e');
+    }
   }
   
   @override

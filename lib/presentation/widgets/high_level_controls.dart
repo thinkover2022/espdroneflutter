@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:espdroneflutter/presentation/providers/high_level_commander_provider.dart';
+import 'package:espdroneflutter/presentation/providers/telemetry_provider.dart';
 import 'package:espdroneflutter/data/services/high_level_commander_service.dart';
 
 class HighLevelControlsWidget extends ConsumerStatefulWidget {
@@ -15,11 +16,12 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
   @override
   Widget build(BuildContext context) {
     final hlState = ref.watch(highLevelCommanderProvider);
+    final telemetryState = ref.watch(telemetryProvider);
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _buildQuickTakeoffButton(hlState),
+        _buildQuickTakeoffButton(hlState, telemetryState),
         _buildQuickLandButton(hlState),
         _buildStopButton(hlState),
       ],
@@ -27,18 +29,29 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
   }
 
 
-  Widget _buildQuickTakeoffButton(HighLevelCommanderProviderState hlState) {
-    final isEnabled = hlState.isEnabled && 
+  Widget _buildQuickTakeoffButton(HighLevelCommanderProviderState hlState, TelemetryProviderState telemetryState) {
+    final isCommanderReady = hlState.isEnabled && 
         (hlState.commanderState == HighLevelCommanderState.idle ||
          hlState.commanderState == HighLevelCommanderState.stopped);
+    final isLogReady = telemetryState.isLogInitialized;
+    final hasHeightData = telemetryState.telemetryData.height != null;
+    final isEnabled = isCommanderReady && isLogReady && hasHeightData;
+    
+    // Determine button label based on state
+    String buttonLabel = 'Takeoff';
+    if (!isLogReady) {
+      buttonLabel = 'LOG...';
+    } else if (!hasHeightData) {
+      buttonLabel = 'DATA...';
+    }
 
     // 디버깅용 로그 출력
-    print('Takeoff button - isEnabled: ${hlState.isEnabled}, commanderState: ${hlState.commanderState}, buttonEnabled: $isEnabled');
+    print('Takeoff button - commander: $isCommanderReady, LOG: $isLogReady, height: $hasHeightData, enabled: $isEnabled');
 
     return ElevatedButton.icon(
       onPressed: isEnabled ? _quickTakeoff : null,
       icon: const Icon(Icons.flight_takeoff),
-      label: const Text('Takeoff'),
+      label: Text(buttonLabel),
       style: ElevatedButton.styleFrom(
         backgroundColor: isEnabled ? Colors.green : Colors.green.withOpacity(0.5),
         foregroundColor: Colors.white,
@@ -91,7 +104,8 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
   // Action methods
   void _quickTakeoff() {
     print('Quick takeoff button pressed!');
-    ref.read(highLevelCommanderProvider.notifier).quickTakeoff();
+    final telemetryState = ref.read(telemetryProvider);
+    ref.read(highLevelCommanderProvider.notifier).quickTakeoff(telemetryState);
   }
 
   void _quickLand() {

@@ -7,6 +7,7 @@ import 'package:espdroneflutter/data/models/crtp_packet.dart';
 class TelemetryProviderState extends Equatable {
   final bool isEnabled;
   final bool isActive;
+  final bool isLogInitialized;
   final TelemetryData telemetryData;
   final String? statusMessage;
   final DateTime? lastUpdate;
@@ -14,6 +15,7 @@ class TelemetryProviderState extends Equatable {
   const TelemetryProviderState({
     required this.isEnabled,
     required this.isActive,
+    required this.isLogInitialized,
     required this.telemetryData,
     this.statusMessage,
     this.lastUpdate,
@@ -23,6 +25,7 @@ class TelemetryProviderState extends Equatable {
     return TelemetryProviderState(
       isEnabled: false,
       isActive: false,
+      isLogInitialized: false,
       telemetryData: TelemetryData(timestamp: DateTime.now()),
     );
   }
@@ -30,6 +33,7 @@ class TelemetryProviderState extends Equatable {
   TelemetryProviderState copyWith({
     bool? isEnabled,
     bool? isActive,
+    bool? isLogInitialized,
     TelemetryData? telemetryData,
     String? statusMessage,
     DateTime? lastUpdate,
@@ -37,6 +41,7 @@ class TelemetryProviderState extends Equatable {
     return TelemetryProviderState(
       isEnabled: isEnabled ?? this.isEnabled,
       isActive: isActive ?? this.isActive,
+      isLogInitialized: isLogInitialized ?? this.isLogInitialized,
       telemetryData: telemetryData ?? this.telemetryData,
       statusMessage: statusMessage ?? this.statusMessage,
       lastUpdate: lastUpdate ?? this.lastUpdate,
@@ -47,6 +52,7 @@ class TelemetryProviderState extends Equatable {
   List<Object?> get props => [
         isEnabled,
         isActive,
+        isLogInitialized,
         telemetryData,
         statusMessage,
         lastUpdate,
@@ -58,6 +64,7 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
   Function(CrtpPacket)? _packetSender;
   StreamSubscription? _telemetrySubscription;
   StreamSubscription? _statusSubscription;
+  Timer? _logStatusCheckTimer;
 
   TelemetryNotifier() : super(TelemetryProviderState.initial());
 
@@ -67,6 +74,7 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
     // Clean up existing resources first
     _telemetrySubscription?.cancel();
     _statusSubscription?.cancel();
+    _logStatusCheckTimer?.cancel();
     _logService?.dispose();
     
     // Initialize new resources
@@ -102,6 +110,9 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
 
     state = state.copyWith(isEnabled: true);
     
+    // Start periodic LOG status checking
+    _startLogStatusMonitoring();
+    
     // Start telemetry initialization
     startTelemetry();
     print('TelemetryNotifier initialized');
@@ -110,6 +121,23 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
   /// Process incoming CRTP packets for LOG responses
   void processIncomingPacket(CrtpPacket packet) {
     _logService?.processIncomingPacket(packet);
+  }
+
+  /// Start periodic LOG status monitoring
+  void _startLogStatusMonitoring() {
+    _logStatusCheckTimer?.cancel();
+    _logStatusCheckTimer = Timer.periodic(Duration(milliseconds: 200), (timer) {
+      if (_logService != null) {
+        final isLogInitialized = _logService!.isInitialized;
+        if (state.isLogInitialized != isLogInitialized) {
+          state = state.copyWith(
+            isLogInitialized: isLogInitialized,
+            lastUpdate: DateTime.now(),
+          );
+          print('LOG initialization state changed: $isLogInitialized');
+        }
+      }
+    });
   }
 
   /// Start telemetry data collection
@@ -130,10 +158,12 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
     if (_logService == null) return;
     
     print('Stopping telemetry collection...');
+    _logStatusCheckTimer?.cancel();
     _logService!.stop();
     
     state = state.copyWith(
       isActive: false,
+      isLogInitialized: false,
       statusMessage: 'Telemetry stopped',
       lastUpdate: DateTime.now(),
     );
@@ -143,11 +173,13 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
   void dispose() {
     print('Disposing TelemetryNotifier...');
     
-    // Cancel subscriptions safely
+    // Cancel subscriptions and timers safely
     _telemetrySubscription?.cancel();
     _telemetrySubscription = null;
     _statusSubscription?.cancel();
     _statusSubscription = null;
+    _logStatusCheckTimer?.cancel();
+    _logStatusCheckTimer = null;
     
     // Dispose LOG service
     _logService?.dispose();

@@ -18,7 +18,7 @@ class EspUdpDriver {
   Timer? _heartbeatTimer;
   Timer? _connectionCheckTimer;
   DateTime? _lastPacketReceived;
-  static const Duration _connectionTimeout = Duration(seconds: 5);
+  static const Duration _connectionTimeout = Duration(seconds: 10);
 
   Stream<CrtpPacket> get incomingPackets => _incomingController.stream;
   Stream<bool> get connectionState => _connectionStateController.stream;

@@ -62,8 +62,11 @@ class LogService {
   final List<LogVariable> _telemetryBlockVariables = [];
   bool _isInitialized = false;
   bool _isRunning = false;
+  bool _isTocDiscoveryComplete = false;
+  bool _isDisposed = false;
   int _logCount = 0;
   int _currentTocIndex = 0;
+  Timer? _tocTimeoutTimer;
   
   // Telemetry block configuration
   static const int _telemetryBlockId = 1;
@@ -83,6 +86,12 @@ class LogService {
   /// Current telemetry data
   TelemetryData get currentTelemetry => _currentTelemetry;
   
+  /// Whether LOG system is fully initialized and ready
+  bool get isInitialized => _isInitialized;
+  
+  /// Whether telemetry logging is currently running
+  bool get isRunning => _isRunning;
+  
   /// Initialize LOG system and request telemetry data
   Future<void> initialize() async {
     if (_isInitialized) {
@@ -99,6 +108,12 @@ class LogService {
     _currentTocIndex = 0;
     _logCount = 0;
     _isRunning = false;
+    _isTocDiscoveryComplete = false;
+    _isDisposed = false;
+    
+    // Cancel any existing timeout timer
+    _tocTimeoutTimer?.cancel();
+    _tocTimeoutTimer = null;
     
     // Step 1: Request TOC info
     _requestTocInfo();
@@ -119,7 +134,7 @@ class LogService {
   
   /// Process incoming CRTP LOG packets
   void processIncomingPacket(CrtpPacket packet) {
-    if (packet.header.port != CrtpPort.log) return;
+    if (_isDisposed || packet.header.port != CrtpPort.log) return;
     
     print('Processing LOG packet - Channel: ${packet.header.channel}, Length: ${packet.payload.length}');
     
@@ -190,10 +205,15 @@ class LogService {
   void _requestNextTocItem() {
     print('_requestNextTocItem called: current=$_currentTocIndex, total=$_logCount');
     
-    if (_currentTocIndex >= _logCount) {
-      // All TOC items received, now create telemetry block
-      print('All TOC items processed ($_currentTocIndex/$_logCount), creating telemetry block...');
-      _createTelemetryBlock();
+    if (_currentTocIndex >= _logCount || _isTocDiscoveryComplete) {
+      if (!_isTocDiscoveryComplete) {
+        // All TOC items received, now create telemetry block
+        print('All TOC items processed ($_currentTocIndex/$_logCount), creating telemetry block...');
+        _isTocDiscoveryComplete = true;
+        _createTelemetryBlock();
+      } else {
+        print('TOC Discovery already complete, ignoring request');
+      }
       return;
     }
     
@@ -201,9 +221,12 @@ class LogService {
     final itemPacket = LogTocItemPacket(_currentTocIndex);
     _sendPacket(itemPacket);
     
-    // Add timeout safety mechanism
-    Timer(Duration(seconds: 2), () {
-      if (_currentTocIndex < _logCount && !_isInitialized) {
+    // Cancel previous timeout timer if exists
+    _tocTimeoutTimer?.cancel();
+    
+    // Add timeout safety mechanism only for incomplete TOC discovery
+    _tocTimeoutTimer = Timer(Duration(milliseconds: 500), () {
+      if (!_isDisposed && _currentTocIndex < _logCount && !_isTocDiscoveryComplete && !_isInitialized) {
         print('TOC request timeout for item $_currentTocIndex, retrying...');
         _requestNextTocItem();
       }
@@ -375,11 +398,20 @@ class LogService {
   
   void dispose() {
     print('Disposing LOG service...');
+    
+    // Mark as disposed to stop all ongoing operations
+    _isDisposed = true;
+    
+    // Cancel timeout timer immediately
+    _tocTimeoutTimer?.cancel();
+    _tocTimeoutTimer = null;
+    
     stop();
     
     // Reset initialization state
     _isInitialized = false;
     _isRunning = false;
+    _isTocDiscoveryComplete = false;
     
     // Clear collections
     _logVariables.clear();
