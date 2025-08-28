@@ -240,9 +240,132 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
     await _service!.emergencyStop();
   }
 
+  /// Calculate variance of height readings to detect sensor noise
+  double _calculateVariance(List<double> readings) {
+    if (readings.length < 2) return 0.0;
+    final mean = readings.reduce((a, b) => a + b) / readings.length;
+    final squaredDiffs = readings.map((x) => (x - mean) * (x - mean));
+    return squaredDiffs.reduce((a, b) => a + b) / readings.length;
+  }
+
   // Convenience methods (require telemetry state to be passed from UI)
-  Future<void> quickTakeoff(TelemetryProviderState telemetryState) async {
-    await takeoff2(telemetryState: telemetryState);
+  Future<void> quickTakeoff(TelemetryProviderState telemetryState, Function() getCurrentTelemetryState) async {
+    const double targetRelativeHeight = 0.3; // 목표 상승 높이
+    const double heightTolerance = 0.05; // 허용 오차 5cm
+    const int maxRetries = 5; // 최대 재시도 횟수
+    
+    // FIXED: 시작 시점의 높이를 한 번만 저장하고 일관되게 사용
+    double? baselineHeight;
+    
+    print('=== SMART TAKEOFF START ===');
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      print('--- Attempt $attempt/$maxRetries ---');
+      
+      try {
+        // 첫 번째 시도에서 baseline 높이 설정
+        if (baselineHeight == null) {
+          final freshTelemetryState = getCurrentTelemetryState();
+          baselineHeight = freshTelemetryState.telemetryData.height;
+          if (baselineHeight == null) {
+            print('❌ No height data available, aborting takeoff');
+            return;
+          }
+          print('Baseline height set: ${baselineHeight.toStringAsFixed(2)}m → Target: ${(baselineHeight + targetRelativeHeight).toStringAsFixed(2)}m');
+        }
+        
+        // takeoff2 실행 전 현재 텔레메트리 상태 확인
+        final preTakeoffState = getCurrentTelemetryState();
+        final preTakeoffHeight = preTakeoffState.telemetryData.height ?? baselineHeight;
+        
+        print('Pre-takeoff height: ${preTakeoffHeight.toStringAsFixed(2)}m');
+        
+        // takeoff2 실행 (duration 5초)
+        await takeoff2(telemetryState: preTakeoffState, duration: 5.0, relativeHeight: targetRelativeHeight);
+        
+        // takeoff2 명령 완료 대기 및 모니터링
+        print('Waiting for takeoff2 completion and monitoring height changes...');
+        
+        // 높이 변화를 여러 번 측정하여 안정성 확인
+        final List<double> heightReadings = [];
+        for (int i = 0; i < 5; i++) {
+          await Future.delayed(Duration(milliseconds: 1000)); // 1초마다 측정
+          final checkState = getCurrentTelemetryState();
+          final checkHeight = checkState.telemetryData.height ?? baselineHeight;
+          heightReadings.add(checkHeight);
+          print('Height check ${i+1}/5: ${checkHeight.toStringAsFixed(2)}m (gain: ${(checkHeight - baselineHeight).toStringAsFixed(2)}m)');
+        }
+        
+        // 최종 높이는 마지막 3개 측정값의 평균으로 계산 (안정성)
+        final recentReadings = heightReadings.skip(2).toList(); // 마지막 3개
+        final currentHeight = recentReadings.reduce((a, b) => a + b) / recentReadings.length;
+        final heightGained = currentHeight - baselineHeight;
+        
+        print('=== FINAL ASSESSMENT ===');
+        print('Height readings: ${heightReadings.map((h) => h.toStringAsFixed(2)).join(', ')} m');
+        print('Baseline: ${baselineHeight.toStringAsFixed(2)}m');
+        print('Final average: ${currentHeight.toStringAsFixed(2)}m');
+        print('Height gained: ${heightGained.toStringAsFixed(2)}m');
+        print('Target gain: ${targetRelativeHeight.toStringAsFixed(2)}m');
+        print('Tolerance: ${heightTolerance.toStringAsFixed(2)}m');
+        print('Success threshold: ${(targetRelativeHeight - heightTolerance).toStringAsFixed(2)}m');
+        
+        // 추가 검증: 높이 변화가 실제 상승인지 확인 (센서 노이즈 필터링)
+        final heightVariance = _calculateVariance(heightReadings);
+        final isStableReading = heightVariance < 0.01; // 1cm 미만의 변화만 안정적으로 간주
+        
+        // 센서 오류 감지: 갑작스럽게 큰 높이 변화는 센서 오류일 가능성
+        final isSuspiciousGain = heightGained > (targetRelativeHeight * 1.5); // 1.5배 이상 상승 시 의심
+        final isExcessiveGain = heightGained > 0.5; // 0.5m 이상 상승 시 과도한 상승
+        
+        print('Height variance: ${heightVariance.toStringAsFixed(4)}m² (stable: $isStableReading)');
+        print('Suspicious gain check: ${isSuspiciousGain} (>${(targetRelativeHeight * 1.5).toStringAsFixed(2)}m)');
+        print('Excessive gain check: ${isExcessiveGain} (>0.50m)');
+        
+        // 사용자 확인 요청 또는 자동 오류 감지
+        if (isExcessiveGain || isSuspiciousGain) {
+          print('⚠️ 경고: 비정상적으로 큰 높이 상승 감지!');
+          print('현재 이를 자동 성공으로 처리하지만, 센서 오류일 가능성이 높습니다.');
+          print('드론이 실제로 떠 있는지 육안으로 확인해주세요!');
+          
+          // TODO: 사용자 인터페이스에서 확인 버튼 추가 가능
+          // 지금은 경고와 함께 성공 처리
+        }
+        
+        if (heightGained >= (targetRelativeHeight - heightTolerance) && isStableReading) {
+          final status = (isSuspiciousGain || isExcessiveGain) ? 'SUCCESS (sensor warning)' : 'SUCCESS';
+          print('✅ TAKEOFF $status after $attempt attempts (gain: ${heightGained.toStringAsFixed(2)}m)');
+          
+          if (isSuspiciousGain || isExcessiveGain) {
+            print('⚠️ 주의: 센서 데이터가 비정상적입니다. 드론이 실제로 이륚했는지 확인해주세요.');
+          }
+          
+          state = state.copyWith(
+            lastCommand: isSuspiciousGain ? 'takeoff completed (sensor warning)' : 'takeoff completed successfully',
+            lastCommandTime: DateTime.now(),
+          );
+          return; // 성공! 완료
+        } else if (heightGained >= (targetRelativeHeight - heightTolerance) && !isStableReading) {
+          print('⚠️ Height reached but readings unstable (variance: ${heightVariance.toStringAsFixed(4)}), continuing...');
+        }
+        
+        print('❌ Height not reached or unstable, need ${(targetRelativeHeight - heightGained).toStringAsFixed(2)}m more');
+        
+      } catch (e) {
+        print('⚠️ Attempt $attempt failed: $e');
+      }
+      
+      if (attempt < maxRetries) {
+        print('Retrying in 1 second...');
+        await Future.delayed(Duration(milliseconds: 1000));
+      }
+    }
+    
+    print('🔴 TAKEOFF FAILED after $maxRetries attempts');
+    state = state.copyWith(
+      lastCommand: 'takeoff failed after $maxRetries attempts',
+      lastCommandTime: DateTime.now(),
+    );
   }
 
   Future<void> quickLand() async {

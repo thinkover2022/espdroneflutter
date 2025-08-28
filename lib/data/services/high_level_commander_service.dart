@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:espdroneflutter/data/models/high_level_commander_packet.dart';
 import 'package:espdroneflutter/data/models/crtp_packet.dart';
+import 'package:espdroneflutter/utils/app_logger.dart';
 
 /// Function type for sending CRTP packets
 typedef PacketSender = void Function(CrtpPacket packet);
@@ -46,11 +47,11 @@ class HighLevelCommanderService {
   
   /// Process incoming CRTP packets to extract command responses
   void processIncomingPacket(CrtpPacket packet) {
-    // Debug: 모든 들어오는 패킷 로그 출력
-    print('Incoming packet - Port: ${packet.header.port.name} (0x${packet.header.port.value.toRadixString(16).padLeft(2, '0')}), Channel: ${packet.header.channel}, Payload length: ${packet.payload.length}');
+    // Debug: 모든 들어오는 패킷 로그 출력 (VERBOSE 레벨에서만 출력)
+    AppLogger.verbose(LogComponent.hlCommander, 'Incoming packet - Port: ${packet.header.port.name} (0x${packet.header.port.value.toRadixString(16).padLeft(2, '0')}), Channel: ${packet.header.channel}, Payload length: ${packet.payload.length}');
     
     if (packet.payload.isNotEmpty) {
-      print('Payload bytes: ${packet.payload.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
+      AppLogger.verbose(LogComponent.hlCommander, 'Payload bytes: ${packet.payload.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
     }
     
     if (packet.header.port == CrtpPort.setpointHl && packet.payload.length >= 4) {
@@ -64,16 +65,16 @@ class HighLevelCommanderService {
           resultCode: resultCode,
         );
         
-        print('High-level command response received: $response');
+        AppLogger.info(LogComponent.hlCommander, 'High-level command response received: $response');
         _commandResponseController.add(response);
         
         // Also add to string responses for backward compatibility
         _responseController.add('Command $commandId response: ${response.success ? "SUCCESS" : "FAILED ($resultCode)"}');
       } catch (e) {
-        print('Error processing high-level command response: $e');
+        AppLogger.error(LogComponent.hlCommander, 'Error processing high-level command response: $e');
       }
     } else {
-      print('Packet does not match high-level response criteria (port: ${packet.header.port.name}, payload length: ${packet.payload.length})');
+      AppLogger.verbose(LogComponent.hlCommander, 'Packet does not match high-level response criteria (port: ${packet.header.port.name}, payload length: ${packet.payload.length})');
     }
   }
 
@@ -228,33 +229,33 @@ class StatefulHighLevelCommanderService extends HighLevelCommanderService {
   }
   
   void _handleCommandResponse(HighLevelCommandResponse response) {
-    print('Handling command response: $response, current state: $_currentState');
+    AppLogger.debug(LogComponent.hlCommander, 'Handling command response: $response, current state: $_currentState');
     
     switch (response.commandId) {
       case 7: // COMMAND_TAKEOFF_2
         if (response.success) {
-          print('Takeoff2 command successful - transitioning to flying state');
+          AppLogger.info(LogComponent.hlCommander, 'Takeoff2 command successful - transitioning to flying state');
           // Transition to flying state immediately upon successful takeoff command
           _setState(HighLevelCommanderState.flying);
         } else {
-          print('Takeoff2 command failed - returning to idle state');
+          AppLogger.warn(LogComponent.hlCommander, 'Takeoff2 command failed - returning to idle state');
           _setState(HighLevelCommanderState.idle);
         }
         break;
         
       case 8: // COMMAND_LAND_2  
         if (response.success) {
-          print('Land2 command successful - transitioning to idle state');
+          AppLogger.info(LogComponent.hlCommander, 'Land2 command successful - transitioning to idle state');
           // Transition to idle state immediately upon successful land command
           _setState(HighLevelCommanderState.idle);
         } else {
-          print('Land2 command failed - staying in current state');
+          AppLogger.warn(LogComponent.hlCommander, 'Land2 command failed - staying in current state');
         }
         break;
         
       case 3: // COMMAND_STOP
         if (response.success) {
-          print('Stop command successful - transitioning to idle state');
+          AppLogger.info(LogComponent.hlCommander, 'Stop command successful - transitioning to idle state');
           _setState(HighLevelCommanderState.idle);
         }
         break;
@@ -263,7 +264,7 @@ class StatefulHighLevelCommanderService extends HighLevelCommanderService {
 
   void _setState(HighLevelCommanderState newState) {
     if (_currentState != newState) {
-      print('State transition: $_currentState → $newState');
+      AppLogger.info(LogComponent.hlCommander, 'State transition: $_currentState → $newState');
       _currentState = newState;
       _stateController.add(newState);
     }
@@ -277,7 +278,7 @@ class StatefulHighLevelCommanderService extends HighLevelCommanderService {
     bool useCurrentYaw = true,
     int groupMask = HighLevelCommanderService.allGroups,
   }) async {
-    print('Starting takeoff2 command - setting state to takingOff');
+    AppLogger.info(LogComponent.hlCommander, 'Starting takeoff2 command - setting state to takingOff');
     _setState(HighLevelCommanderState.takingOff);
     
     await super.takeoff2(
@@ -300,7 +301,7 @@ class StatefulHighLevelCommanderService extends HighLevelCommanderService {
     bool useCurrentYaw = true,
     int groupMask = HighLevelCommanderService.allGroups,
   }) async {
-    print('Starting land2 command - setting state to landing');
+    AppLogger.info(LogComponent.hlCommander, 'Starting land2 command - setting state to landing');
     _setState(HighLevelCommanderState.landing);
     
     await super.land2(
@@ -317,7 +318,7 @@ class StatefulHighLevelCommanderService extends HighLevelCommanderService {
 
   @override
   Future<void> emergencyStop({int groupMask = HighLevelCommanderService.allGroups}) async {
-    print('Starting emergency stop command - setting state to stopped');
+    AppLogger.warn(LogComponent.hlCommander, 'Starting emergency stop command - setting state to stopped');
     _setState(HighLevelCommanderState.stopped);
     
     await super.emergencyStop(groupMask: groupMask);

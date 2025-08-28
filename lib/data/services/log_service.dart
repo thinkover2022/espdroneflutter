@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:espdroneflutter/data/models/crtp_packet.dart';
 import 'package:espdroneflutter/data/models/log_packet.dart';
+import 'package:espdroneflutter/utils/app_logger.dart';
 
 /// Function type for sending CRTP packets
 typedef PacketSender = void Function(CrtpPacket packet);
@@ -9,38 +10,46 @@ typedef PacketSender = void Function(CrtpPacket packet);
 /// Telemetry data model
 class TelemetryData {
   final double? height;           // stateEstimate.z
+  final double? verticalVelocity; // stateEstimate.vz
   final double? batteryVoltage;   // pm.vbat
   final int? batteryLevel;        // pm.batteryLevel
   final double? roll;             // stateEstimate.roll
   final double? pitch;            // stateEstimate.pitch
   final double? yaw;              // stateEstimate.yaw
+  final double? accelerationZ;    // acc.z
   final DateTime timestamp;
   
   const TelemetryData({
     this.height,
+    this.verticalVelocity,
     this.batteryVoltage,
     this.batteryLevel,
     this.roll,
     this.pitch,
     this.yaw,
+    this.accelerationZ,
     required this.timestamp,
   });
   
   TelemetryData copyWith({
     double? height,
+    double? verticalVelocity,
     double? batteryVoltage,
     int? batteryLevel,
     double? roll,
     double? pitch,
     double? yaw,
+    double? accelerationZ,
   }) {
     return TelemetryData(
       height: height ?? this.height,
+      verticalVelocity: verticalVelocity ?? this.verticalVelocity,
       batteryVoltage: batteryVoltage ?? this.batteryVoltage,
       batteryLevel: batteryLevel ?? this.batteryLevel,
       roll: roll ?? this.roll,
       pitch: pitch ?? this.pitch,
       yaw: yaw ?? this.yaw,
+      accelerationZ: accelerationZ ?? this.accelerationZ,
       timestamp: DateTime.now(),
     );
   }
@@ -95,11 +104,11 @@ class LogService {
   /// Initialize LOG system and request telemetry data
   Future<void> initialize() async {
     if (_isInitialized) {
-      print('LOG service already initialized, skipping...');
+      AppLogger.info(LogComponent.logService, 'LOG service already initialized, skipping...');
       return;
     }
     
-    print('Initializing LOG service...');
+    AppLogger.info(LogComponent.logService, 'Initializing LOG service...');
     _statusController.add('Initializing LOG system...');
     
     // Reset state for clean initialization
@@ -123,7 +132,7 @@ class LogService {
   void stop() {
     if (!_isRunning) return;
     
-    print('Stopping telemetry logging...');
+    AppLogger.info(LogComponent.logService, 'Stopping telemetry logging...');
     _statusController.add('Stopping telemetry...');
     
     // Stop the telemetry block
@@ -136,88 +145,88 @@ class LogService {
   void processIncomingPacket(CrtpPacket packet) {
     if (_isDisposed || packet.header.port != CrtpPort.log) return;
     
-    print('Processing LOG packet - Channel: ${packet.header.channel}, Length: ${packet.payload.length}');
+    AppLogger.verbose(LogComponent.logService, 'Processing LOG packet - Channel: ${packet.header.channel}, Length: ${packet.payload.length}');
     
     switch (packet.header.channel) {
       case 0: // TOC channel
-        print('Processing TOC channel packet');
+        AppLogger.debug(LogComponent.logService, 'Processing TOC channel packet');
         _processTocPacket(packet);
         break;
       case 1: // Control channel
-        print('Processing Control channel packet');
+        AppLogger.debug(LogComponent.logService, 'Processing Control channel packet');
         _processControlPacket(packet);
         break;
       case 2: // Log data channel
-        print('Processing Log data channel packet');
+        AppLogger.verbose(LogComponent.logService, 'Processing Log data channel packet');
         _processLogDataPacket(packet);
         break;
       default:
-        print('Unknown LOG channel: ${packet.header.channel}');
+        AppLogger.warn(LogComponent.logService, 'Unknown LOG channel: ${packet.header.channel}');
         break;
     }
   }
   
   void _requestTocInfo() {
-    print('Requesting TOC info...');
+    AppLogger.debug(LogComponent.logService, 'Requesting TOC info...');
     final tocInfoPacket = LogTocInfoPacket();
-    print('Sending TOC info packet: Port=${tocInfoPacket.header.port.name}, Channel=${tocInfoPacket.header.channel}');
+    AppLogger.verbose(LogComponent.logService, 'Sending TOC info packet: Port=${tocInfoPacket.header.port.name}, Channel=${tocInfoPacket.header.channel}');
     _sendPacket(tocInfoPacket);
-    print('TOC info packet sent');
+    AppLogger.verbose(LogComponent.logService, 'TOC info packet sent');
   }
   
   void _processTocPacket(CrtpPacket packet) {
     if (packet.payload.isEmpty) {
-      print('Received empty TOC packet');
+      AppLogger.warn(LogComponent.logService, 'Received empty TOC packet');
       return;
     }
     
     final command = packet.payload[0];
-    print('Processing TOC packet - Command: $command, Length: ${packet.payload.length}');
-    print('Payload bytes: ${packet.payload.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
+    AppLogger.verbose(LogComponent.logService, 'Processing TOC packet - Command: $command, Length: ${packet.payload.length}');
+    AppLogger.verbose(LogComponent.logService, 'Payload bytes: ${packet.payload.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
     
     switch (command) {
       case 3: // CMD_GET_INFO_V2 response
-        print('Received CMD_GET_INFO_V2 response');
+        AppLogger.debug(LogComponent.logService, 'Received CMD_GET_INFO_V2 response');
         if (packet.payload.length >= 9) {
           _logCount = ByteData.sublistView(packet.payload, 1, 3).getUint16(0, Endian.little);
-          print('LOG system has $_logCount variables');
+          AppLogger.info(LogComponent.logService, 'LOG system has $_logCount variables');
           _statusController.add('Found $_logCount log variables');
           
           // Start requesting individual TOC items
           _currentTocIndex = 0;
           _requestNextTocItem();
         } else {
-          print('TOC info response too short: ${packet.payload.length} bytes');
+          AppLogger.error(LogComponent.logService, 'TOC info response too short: ${packet.payload.length} bytes');
         }
         break;
         
       case 2: // CMD_GET_ITEM_V2 response
-        print('Received CMD_GET_ITEM_V2 response');
+        AppLogger.debug(LogComponent.logService, 'Received CMD_GET_ITEM_V2 response');
         _processTocItemResponse(packet);
         break;
         
       default:
-        print('Unknown TOC command: $command');
+        AppLogger.warn(LogComponent.logService, 'Unknown TOC command: $command');
         break;
     }
   }
   
   void _requestNextTocItem() {
-    print('_requestNextTocItem called: current=$_currentTocIndex, total=$_logCount');
+    AppLogger.verbose(LogComponent.logService, '_requestNextTocItem called: current=$_currentTocIndex, total=$_logCount');
     
     if (_currentTocIndex >= _logCount || _isTocDiscoveryComplete) {
       if (!_isTocDiscoveryComplete) {
         // All TOC items received, now create telemetry block
-        print('All TOC items processed ($_currentTocIndex/$_logCount), creating telemetry block...');
+        AppLogger.info(LogComponent.logService, 'All TOC items processed ($_currentTocIndex/$_logCount), creating telemetry block...');
         _isTocDiscoveryComplete = true;
         _createTelemetryBlock();
       } else {
-        print('TOC Discovery already complete, ignoring request');
+        AppLogger.debug(LogComponent.logService, 'TOC Discovery already complete, ignoring request');
       }
       return;
     }
     
-    print('Requesting TOC item $_currentTocIndex...');
+    AppLogger.verbose(LogComponent.logService, 'Requesting TOC item $_currentTocIndex...');
     final itemPacket = LogTocItemPacket(_currentTocIndex);
     _sendPacket(itemPacket);
     
@@ -227,17 +236,17 @@ class LogService {
     // Add timeout safety mechanism only for incomplete TOC discovery
     _tocTimeoutTimer = Timer(Duration(milliseconds: 500), () {
       if (!_isDisposed && _currentTocIndex < _logCount && !_isTocDiscoveryComplete && !_isInitialized) {
-        print('TOC request timeout for item $_currentTocIndex, retrying...');
+        AppLogger.warn(LogComponent.logService, 'TOC request timeout for item $_currentTocIndex, retrying...');
         _requestNextTocItem();
       }
     });
   }
   
   void _processTocItemResponse(CrtpPacket packet) {
-    print('Processing TOC item response for index $_currentTocIndex - Payload length: ${packet.payload.length}');
+    AppLogger.verbose(LogComponent.logService, 'Processing TOC item response for index $_currentTocIndex - Payload length: ${packet.payload.length}');
     
     if (packet.payload.length < 4) {
-      print('TOC item $_currentTocIndex response too short (${packet.payload.length} bytes), moving to next');
+      AppLogger.warn(LogComponent.logService, 'TOC item $_currentTocIndex response too short (${packet.payload.length} bytes), moving to next');
       _currentTocIndex++;
       _requestNextTocItem();
       return;
@@ -249,7 +258,7 @@ class LogService {
       // Parse log type from byte 3 (1-based in protocol, convert to 0-based for enum)
       final logTypeValue = packet.payload[3];
       if (logTypeValue < 1 || logTypeValue > LogType.values.length) {
-        print('Invalid log type value: $logTypeValue');
+        AppLogger.error(LogComponent.logService, 'Invalid log type value: $logTypeValue');
         _currentTocIndex++;
         _requestNextTocItem();
         return;
@@ -271,34 +280,38 @@ class LogService {
         );
         
         _logVariables[varId] = variable;
-        print('TOC item $_currentTocIndex: ID=$varId, ${variable.fullName}, Type=${logType.name}');
+        AppLogger.verbose(LogComponent.logService, 'TOC item $_currentTocIndex: ID=$varId, ${variable.fullName}, Type=${logType.name}');
         
         // Check if this is a variable we want for telemetry
         if (_isTelemetryVariable(variable)) {
           _telemetryBlockVariables.add(variable);
-          print('*** FOUND TELEMETRY VARIABLE: ${variable.fullName} ***');
+          AppLogger.info(LogComponent.logService, 'Found telemetry variable: ${variable.fullName}');
         }
       } else {
-        print('TOC item $_currentTocIndex: Failed to parse group/name from fullText="$fullText"');
+        AppLogger.error(LogComponent.logService, 'TOC item $_currentTocIndex: Failed to parse group/name from fullText="$fullText"');
       }
     } catch (e) {
-      print('Error parsing TOC item $_currentTocIndex: $e');
-      print('Payload bytes: ${packet.payload.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
+      AppLogger.error(LogComponent.logService, 'Error parsing TOC item $_currentTocIndex: $e');
+      AppLogger.error(LogComponent.logService, 'Payload bytes: ${packet.payload.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
     }
     
     _currentTocIndex++;
-    print('Requesting next TOC item: $_currentTocIndex of $_logCount');
+    AppLogger.verbose(LogComponent.logService, 'Requesting next TOC item: $_currentTocIndex of $_logCount');
     _requestNextTocItem();
   }
   
   bool _isTelemetryVariable(LogVariable variable) {
+    // Reduce to essential variables only to avoid "block size exceeds maximum" error
     const targetVariables = [
-      'stateEstimate.z',      // Height
-      'stateEstimate.roll',   // Roll angle
-      'stateEstimate.pitch',  // Pitch angle  
-      'stateEstimate.yaw',    // Yaw angle
-      'pm.vbat',              // Battery voltage
-      'pm.batteryLevel',      // Battery level
+      'stateEstimate.z',      // Height (essential for takeoff verification)
+      'stateEstimate.vz',     // Vertical velocity (essential for motion verification)  
+      'pm.vbat',              // Battery voltage (essential for safety)
+      'pm.batteryLevel',      // Battery level (essential for safety)
+      // Remove attitude and acceleration to reduce block size
+      // 'stateEstimate.roll',   // Roll angle
+      // 'stateEstimate.pitch',  // Pitch angle  
+      // 'stateEstimate.yaw',    // Yaw angle
+      // 'acc.z',                // Z-axis acceleration (for motion verification)
     ];
     
     return targetVariables.contains(variable.fullName);
@@ -306,13 +319,18 @@ class LogService {
   
   void _createTelemetryBlock() {
     if (_telemetryBlockVariables.isEmpty) {
-      print('No telemetry variables found!');
+      AppLogger.error(LogComponent.logService, 'No telemetry variables found!');
       _statusController.add('No telemetry variables available');
       return;
     }
     
-    print('Creating telemetry block with ${_telemetryBlockVariables.length} variables');
+    AppLogger.info(LogComponent.logService, 'Creating telemetry block with ${_telemetryBlockVariables.length} variables');
     _statusController.add('Creating telemetry block...');
+    
+    // Debug: Log the variables being added to the block
+    for (final variable in _telemetryBlockVariables) {
+      AppLogger.info(LogComponent.logService, 'Adding variable: ${variable.fullName} (ID=${variable.id}, Type=${variable.type.name})');
+    }
     
     final configs = _telemetryBlockVariables.map((variable) => 
       LogVariableConfig(
@@ -320,6 +338,9 @@ class LogService {
         logType: variable.type,
       )
     ).toList();
+    
+    // Debug: Log packet details
+    AppLogger.info(LogComponent.logService, 'Block ID: $_telemetryBlockId, Variable count: ${configs.length}');
     
     final createPacket = LogCreateBlockPacket(_telemetryBlockId, configs);
     _sendPacket(createPacket);
@@ -337,23 +358,24 @@ class LogService {
     switch (command) {
       case 6: // CONTROL_CREATE_BLOCK_V2 response
         if (result == 0) {
-          print('Telemetry block created successfully');
+          AppLogger.info(LogComponent.logService, 'Telemetry block created successfully');
           _statusController.add('Starting telemetry...');
           _startTelemetryBlock();
         } else {
-          print('Failed to create telemetry block: $result');
-          _statusController.add('Failed to create telemetry block');
+          final errorMessage = _getLogErrorMessage(result);
+          AppLogger.error(LogComponent.logService, 'Failed to create telemetry block: error $result - $errorMessage');
+          _statusController.add('Failed to create telemetry block: $errorMessage');
         }
         break;
         
       case 3: // CONTROL_START_BLOCK response
         if (result == 0) {
-          print('Telemetry logging started');
+          AppLogger.info(LogComponent.logService, 'Telemetry logging started');
           _statusController.add('Telemetry active');
           _isInitialized = true;
           _isRunning = true;
         } else {
-          print('Failed to start telemetry block: $result');
+          AppLogger.error(LogComponent.logService, 'Failed to start telemetry block: error $result');
           _statusController.add('Failed to start telemetry');
         }
         break;
@@ -369,20 +391,16 @@ class LogService {
     final logData = parseLogDataPacket(packet, _telemetryBlockVariables);
     if (logData == null || logData.blockId != _telemetryBlockId) return;
     
-    // Extract telemetry values from log data
+    // Extract essential telemetry values from log data
     final height = logData.data['stateEstimate.z'] as double?;
-    final roll = logData.data['stateEstimate.roll'] as double?;
-    final pitch = logData.data['stateEstimate.pitch'] as double?;
-    final yaw = logData.data['stateEstimate.yaw'] as double?;
+    final verticalVelocity = logData.data['stateEstimate.vz'] as double?;
     final batteryVoltage = logData.data['pm.vbat'] as double?;
     final batteryLevel = logData.data['pm.batteryLevel'] as int?;
     
-    // Update current telemetry data
+    // Update current telemetry data (keep existing roll/pitch/yaw/accelerationZ values)
     _currentTelemetry = _currentTelemetry.copyWith(
       height: height,
-      roll: roll,
-      pitch: pitch,
-      yaw: yaw,
+      verticalVelocity: verticalVelocity,
       batteryVoltage: batteryVoltage,
       batteryLevel: batteryLevel,
     );
@@ -390,14 +408,15 @@ class LogService {
     // Broadcast the update
     _telemetryController.add(_currentTelemetry);
     
-    // Debug output
+    // Debug output with essential data
     if (height != null || batteryVoltage != null) {
-      print('Telemetry: H=${height?.toStringAsFixed(2)}m BAT=${batteryVoltage?.toStringAsFixed(1)}V ${batteryLevel ?? 0}%');
+      final vzStr = verticalVelocity != null ? ' Vz=${verticalVelocity.toStringAsFixed(2)}m/s' : '';
+      AppLogger.debug(LogComponent.telemetry, 'H=${height?.toStringAsFixed(2)}m$vzStr BAT=${batteryVoltage?.toStringAsFixed(1)}V ${batteryLevel ?? 0}%');
     }
   }
   
   void dispose() {
-    print('Disposing LOG service...');
+    AppLogger.info(LogComponent.logService, 'Disposing LOG service...');
     
     // Mark as disposed to stop all ongoing operations
     _isDisposed = true;
@@ -425,6 +444,34 @@ class LogService {
       _statusController.close();
     }
     
-    print('LOG service disposed');
+    AppLogger.info(LogComponent.logService, 'LOG service disposed');
+  }
+  
+  /// Get human-readable error message for LOG error codes
+  String _getLogErrorMessage(int errorCode) {
+    switch (errorCode) {
+      case 0: return 'Success';
+      case 1: return 'Command not found';
+      case 2: return 'Wrong number of arguments';
+      case 3: return 'Argument out of range';
+      case 4: return 'Generic error';
+      case 5: return 'Operation in progress';
+      case 6: return 'Operation not supported';
+      case 7: return 'Table of Contents (TOC) not found';
+      case 8: return 'Too many log blocks active';
+      case 9: return 'Block already exists';
+      case 10: return 'Block not found';
+      case 11: return 'Block is currently running';
+      case 12: return 'Block contains too many variables';
+      case 13: return 'Variable not found';
+      case 14: return 'Variable type mismatch';
+      case 15: return 'Insufficient memory';
+      case 16: return 'Block configuration invalid';
+      case 17: return 'Block size exceeds maximum allowed';
+      case 18: return 'Log system busy';
+      case 19: return 'Log system not initialized';
+      case 20: return 'Variable access denied';
+      default: return 'Unknown error';
+    }
   }
 }

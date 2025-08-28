@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:espdroneflutter/presentation/providers/high_level_commander_provider.dart';
 import 'package:espdroneflutter/presentation/providers/telemetry_provider.dart';
 import 'package:espdroneflutter/data/services/high_level_commander_service.dart';
+import 'package:espdroneflutter/utils/app_logger.dart';
 
 class HighLevelControlsWidget extends ConsumerStatefulWidget {
   const HighLevelControlsWidget({super.key});
@@ -46,7 +47,7 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
     }
 
     // 디버깅용 로그 출력
-    print('Takeoff button - commander: $isCommanderReady, LOG: $isLogReady, height: $hasHeightData, enabled: $isEnabled');
+    AppLogger.verbose(LogComponent.ui, 'Takeoff button - commander: $isCommanderReady, LOG: $isLogReady, height: $hasHeightData, enabled: $isEnabled');
 
     return ElevatedButton.icon(
       onPressed: isEnabled ? _quickTakeoff : null,
@@ -64,9 +65,13 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
   }
 
   Widget _buildQuickLandButton(HighLevelCommanderProviderState hlState) {
+    final telemetryState = ref.watch(telemetryProvider);
+    final currentHeight = telemetryState.telemetryData.height ?? 0.0;
+    final isAirborne = currentHeight > 0.5; // 0.5m 이상일 때만 공중으로 간주
+    
     final isEnabled = hlState.isEnabled && 
-        (hlState.commanderState == HighLevelCommanderState.flying ||
-         hlState.commanderState == HighLevelCommanderState.takingOff);
+        hlState.commanderState == HighLevelCommanderState.flying &&
+        isAirborne;
 
     return ElevatedButton.icon(
       onPressed: isEnabled ? _quickLand : null,
@@ -103,9 +108,12 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
 
   // Action methods
   void _quickTakeoff() {
-    print('Quick takeoff button pressed!');
+    AppLogger.info(LogComponent.ui, 'Quick takeoff button pressed!');
     final telemetryState = ref.read(telemetryProvider);
-    ref.read(highLevelCommanderProvider.notifier).quickTakeoff(telemetryState);
+    ref.read(highLevelCommanderProvider.notifier).quickTakeoff(
+      telemetryState, 
+      () => ref.read(telemetryProvider)
+    );
   }
 
   void _quickLand() {
