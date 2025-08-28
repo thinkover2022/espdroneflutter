@@ -4,6 +4,7 @@ import 'package:equatable/equatable.dart';
 import 'package:espdroneflutter/data/services/high_level_commander_service.dart';
 import 'package:espdroneflutter/data/models/crtp_packet.dart';
 import 'package:espdroneflutter/presentation/providers/telemetry_provider.dart';
+import 'package:espdroneflutter/presentation/providers/flight_control_provider.dart';
 
 class HighLevelCommanderProviderState extends Equatable {
   final bool isEnabled;
@@ -57,12 +58,18 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
   StatefulHighLevelCommanderService? _service;
   Function(CrtpPacket)? _packetSender;
   StreamSubscription? _incomingPacketSubscription;
+  
+  // References for controlling low-level commands
+  FlightControlNotifier? _flightControlNotifier;
+  Function(CrtpPacket)? _lowLevelCommandSender;
 
   HighLevelCommanderNotifier() : super(HighLevelCommanderProviderState.initial());
 
-  void initialize(Function(CrtpPacket) packetSender) {
+  void initialize(Function(CrtpPacket) packetSender, {FlightControlNotifier? flightControlNotifier, Function(CrtpPacket)? lowLevelCommandSender}) {
     _packetSender = packetSender;
     _service = StatefulHighLevelCommanderService(packetSender);
+    _flightControlNotifier = flightControlNotifier;
+    _lowLevelCommandSender = lowLevelCommandSender;
 
     // Listen to state changes
     _service!.stateStream.listen((commanderState) {
@@ -83,6 +90,24 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
   /// Process incoming CRTP packets for command responses
   void processIncomingPacket(CrtpPacket packet) {
     _service?.processIncomingPacket(packet);
+  }
+
+  /// Stop low-level joystick commands to allow High Level Commander to take over
+  void _stopJoystickCommands() {
+    if (_flightControlNotifier != null) {
+      print('Stopping joystick commands for High Level Commander');
+      _flightControlNotifier!.stopCommandLoop();
+      // Also send zero values to ensure drone stops receiving commands
+      _flightControlNotifier!.emergencyStop();
+    }
+  }
+
+  /// Restart low-level joystick commands
+  void _restartJoystickCommands() {
+    if (_flightControlNotifier != null && _lowLevelCommandSender != null) {
+      print('Restarting joystick commands');
+      _flightControlNotifier!.startCommandLoop(_lowLevelCommandSender!);
+    }
   }
 
   @override
@@ -125,6 +150,13 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
       return;
     }
 
+    // Stop low-level joystick commands
+    _stopJoystickCommands();
+    
+    // Wait for ESP-Drone commander timeout (2+ seconds) to activate High Level Commander
+    print('Waiting for ESP-Drone commander timeout (2.5s) to activate High Level Commander...');
+    await Future.delayed(Duration(milliseconds: 2500));
+
     // Use validated height data
     final absoluteHeight = currentHeight + relativeHeight;
 
@@ -139,12 +171,23 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
       lastCommandTime: DateTime.now(),
     );
 
-    await _service!.takeoff2(
-      height: absoluteHeight,
-      duration: duration,
-      yaw: yaw,
-      useCurrentYaw: useCurrentYaw,
-    );
+    try {
+      await _service!.takeoff2(
+        height: absoluteHeight,
+        duration: duration,
+        yaw: yaw,
+        useCurrentYaw: useCurrentYaw,
+      );
+      
+      // Wait for takeoff duration, then restart joystick commands
+      await Future.delayed(Duration(milliseconds: (duration * 1000 + 1000).toInt()));
+      _restartJoystickCommands();
+    } catch (e) {
+      print('Takeoff2 error: $e');
+      // Always restart joystick commands even if takeoff fails
+      _restartJoystickCommands();
+      rethrow;
+    }
   }
 
   Future<void> land2({
@@ -155,17 +198,35 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
   }) async {
     if (_service == null) return;
 
+    // Stop low-level joystick commands
+    _stopJoystickCommands();
+    
+    // Wait for ESP-Drone commander timeout (2+ seconds) to activate High Level Commander
+    print('Waiting for ESP-Drone commander timeout (2.5s) to activate High Level Commander...');
+    await Future.delayed(Duration(milliseconds: 2500));
+
     state = state.copyWith(
       lastCommand: 'land2(height: ${height}m, duration: ${duration}s)',
       lastCommandTime: DateTime.now(),
     );
 
-    await _service!.land2(
-      height: height,
-      duration: duration,
-      yaw: yaw,
-      useCurrentYaw: useCurrentYaw,
-    );
+    try {
+      await _service!.land2(
+        height: height,
+        duration: duration,
+        yaw: yaw,
+        useCurrentYaw: useCurrentYaw,
+      );
+      
+      // Wait for landing duration, then restart joystick commands
+      await Future.delayed(Duration(milliseconds: (duration * 1000 + 1000).toInt()));
+      _restartJoystickCommands();
+    } catch (e) {
+      print('Land2 error: $e');
+      // Always restart joystick commands even if landing fails
+      _restartJoystickCommands();
+      rethrow;
+    }
   }
 
   Future<void> emergencyStop() async {

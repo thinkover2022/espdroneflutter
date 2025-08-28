@@ -302,9 +302,10 @@ class _MainPageState extends ConsumerState<MainPage> {
     print('Initializing High Level Commander...');
     final connectionNotifier = ref.read(droneConnectionProvider.notifier);
     final hlCommander = ref.read(highLevelCommanderProvider.notifier);
+    final flightControlNotifier = ref.read(flightControlProvider.notifier);
 
-    // Initialize with a packet sender function
-    hlCommander.initialize((packet) {
+    // High-level packet sender function
+    void hlPacketSender(packet) {
       try {
         if (connectionNotifier.udpDriver != null && connectionNotifier.udpDriver!.isConnected) {
           print('Sending high-level command packet via UDP');
@@ -318,7 +319,29 @@ class _MainPageState extends ConsumerState<MainPage> {
       } catch (e) {
         print('Error sending high-level command packet: $e');
       }
-    });
+    }
+
+    // Low-level packet sender function (for joystick commands)
+    void llPacketSender(packet) {
+      try {
+        if (connectionNotifier.udpDriver != null && connectionNotifier.udpDriver!.isConnected) {
+          connectionNotifier.udpDriver!.sendPacket(packet);
+        } else if (connectionNotifier.bleDriver != null) {
+          connectionNotifier.bleDriver!.sendPacket(packet);
+        }
+      } catch (e) {
+        print('Error sending flight control packet: $e');
+        // 연결 오류 시 안전하게 정지
+        flightControlNotifier.emergencyStop();
+      }
+    }
+
+    // Initialize with both high-level and low-level packet senders
+    hlCommander.initialize(
+      hlPacketSender,
+      flightControlNotifier: flightControlNotifier,
+      lowLevelCommandSender: llPacketSender,
+    );
     
     // Packet subscription is handled in _initializeTelemetry() to avoid duplication
     
