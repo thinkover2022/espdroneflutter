@@ -301,17 +301,13 @@ class LogService {
   }
   
   bool _isTelemetryVariable(LogVariable variable) {
-    // Reduce to essential variables only to avoid "block size exceeds maximum" error
+    // Start with minimum essential variables to resolve "block size exceeds maximum" error
     const targetVariables = [
-      'stateEstimate.z',      // Height (essential for takeoff verification)
-      'stateEstimate.vz',     // Vertical velocity (essential for motion verification)  
+      'stateEstimate.z',      // Height (most essential for takeoff verification)
       'pm.vbat',              // Battery voltage (essential for safety)
-      'pm.batteryLevel',      // Battery level (essential for safety)
-      // Remove attitude and acceleration to reduce block size
-      // 'stateEstimate.roll',   // Roll angle
-      // 'stateEstimate.pitch',  // Pitch angle  
-      // 'stateEstimate.yaw',    // Yaw angle
-      // 'acc.z',                // Z-axis acceleration (for motion verification)
+      // Temporarily remove even more variables to test block creation
+      // 'stateEstimate.vz',     // Vertical velocity (add back if block creation works)  
+      // 'pm.batteryLevel',      // Battery level (add back if block creation works)
     ];
     
     return targetVariables.contains(variable.fullName);
@@ -391,27 +387,22 @@ class LogService {
     final logData = parseLogDataPacket(packet, _telemetryBlockVariables);
     if (logData == null || logData.blockId != _telemetryBlockId) return;
     
-    // Extract essential telemetry values from log data
+    // Extract minimal essential telemetry values from log data
     final height = logData.data['stateEstimate.z'] as double?;
-    final verticalVelocity = logData.data['stateEstimate.vz'] as double?;
     final batteryVoltage = logData.data['pm.vbat'] as double?;
-    final batteryLevel = logData.data['pm.batteryLevel'] as int?;
     
-    // Update current telemetry data (keep existing roll/pitch/yaw/accelerationZ values)
+    // Update current telemetry data (keep existing values for removed variables)
     _currentTelemetry = _currentTelemetry.copyWith(
       height: height,
-      verticalVelocity: verticalVelocity,
       batteryVoltage: batteryVoltage,
-      batteryLevel: batteryLevel,
     );
     
     // Broadcast the update
     _telemetryController.add(_currentTelemetry);
     
-    // Debug output with essential data
+    // Debug output with minimal data
     if (height != null || batteryVoltage != null) {
-      final vzStr = verticalVelocity != null ? ' Vz=${verticalVelocity.toStringAsFixed(2)}m/s' : '';
-      AppLogger.debug(LogComponent.telemetry, 'H=${height?.toStringAsFixed(2)}m$vzStr BAT=${batteryVoltage?.toStringAsFixed(1)}V ${batteryLevel ?? 0}%');
+      AppLogger.debug(LogComponent.telemetry, 'H=${height?.toStringAsFixed(2)}m BAT=${batteryVoltage?.toStringAsFixed(1)}V');
     }
   }
   
