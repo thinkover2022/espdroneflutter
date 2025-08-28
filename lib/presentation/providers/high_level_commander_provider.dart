@@ -248,6 +248,67 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
     return squaredDiffs.reduce((a, b) => a + b) / readings.length;
   }
 
+  /// Detect if height increase is due to propeller pressure vs actual takeoff
+  bool _isActualTakeoff(List<double> heightReadings, double baselineHeight) {
+    if (heightReadings.length < 4) return false;
+    
+    final heightChanges = <double>[];
+    for (int i = 1; i < heightReadings.length; i++) {
+      heightChanges.add(heightReadings[i] - heightReadings[i-1]);
+    }
+    
+    // 실제 이륙의 특징:
+    // 1. 지속적인 상승: 연속된 양의 변화
+    final consecutiveRises = _getMaxConsecutivePositiveChanges(heightChanges);
+    
+    // 2. 안정적인 상승: 너무 급격하지 않은 변화
+    final maxChangeRate = heightChanges.map((c) => c.abs()).reduce((a, b) => a > b ? a : b);
+    final positiveChanges = heightChanges.where((c) => c > 0).toList();
+    final avgChangeRate = positiveChanges.isEmpty ? 0.0 : 
+                         positiveChanges.fold(0.0, (a, b) => a + b) / positiveChanges.length;
+    
+    // 3. 충분한 총 상승: 프로펠러 압력만으로는 0.15m 이상 지속 상승 어려움
+    final totalRise = heightReadings.last - baselineHeight;
+    
+    // 프로펠러 압력 효과의 특징:
+    // - 초기에 급격한 상승 후 안정화
+    // - 불규칙한 변화 패턴
+    // - 0.05-0.1m 정도의 제한된 상승
+    
+    final isGradualRise = maxChangeRate < 0.15; // 15cm/초 미만의 점진적 상승
+    final isSustainedRise = consecutiveRises >= 3; // 3번 이상 연속 상승
+    final isSufficientRise = totalRise > 0.15; // 15cm 이상 상승
+    final isStablePattern = avgChangeRate > 0.02 && avgChangeRate < 0.08; // 안정적인 상승 패턴
+    
+    print('📊 이륙 패턴 분석:');
+    print('   연속 상승 횟수: $consecutiveRises/3 (${isSustainedRise ? "✅" : "❌"})');
+    print('   최대 변화율: ${(maxChangeRate * 100).toStringAsFixed(1)}cm/s (${isGradualRise ? "✅" : "❌"})');
+    print('   평균 상승율: ${(avgChangeRate * 100).toStringAsFixed(1)}cm/s (${isStablePattern ? "✅" : "❌"})');
+    print('   총 상승: ${(totalRise * 100).toStringAsFixed(1)}cm (${isSufficientRise ? "✅" : "❌"})');
+    
+    final isActualTakeoff = isSustainedRise && isGradualRise && isSufficientRise && isStablePattern;
+    print('   결과: ${isActualTakeoff ? "🚁 실제 이륙" : "💨 프로펠러 압력 효과"}');
+    
+    return isActualTakeoff;
+  }
+  
+  /// Get maximum consecutive positive changes in height readings
+  int _getMaxConsecutivePositiveChanges(List<double> changes) {
+    int maxConsecutive = 0;
+    int currentConsecutive = 0;
+    
+    for (final change in changes) {
+      if (change > 0.02) { // 2cm 이상의 변화만 유의미한 상승으로 간주
+        currentConsecutive++;
+        maxConsecutive = maxConsecutive > currentConsecutive ? maxConsecutive : currentConsecutive;
+      } else {
+        currentConsecutive = 0;
+      }
+    }
+    
+    return maxConsecutive;
+  }
+
   // Convenience methods (require telemetry state to be passed from UI)
   Future<void> quickTakeoff(TelemetryProviderState telemetryState, Function() getCurrentTelemetryState) async {
     const double targetRelativeHeight = 0.3; // 목표 상승 높이
@@ -310,6 +371,9 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
         print('Tolerance: ${heightTolerance.toStringAsFixed(2)}m');
         print('Success threshold: ${(targetRelativeHeight - heightTolerance).toStringAsFixed(2)}m');
         
+        // 🚁 프로펠러 압력 vs 실제 이륙 구분 분석
+        final isActualTakeoffPattern = _isActualTakeoff(heightReadings, baselineHeight);
+        
         // 추가 검증: 높이 변화가 실제 상승인지 확인 (센서 노이즈 필터링)
         final heightVariance = _calculateVariance(heightReadings);
         final isStableReading = heightVariance < 0.01; // 1cm 미만의 변화만 안정적으로 간주
@@ -332,21 +396,30 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
           // 지금은 경고와 함께 성공 처리
         }
         
-        if (heightGained >= (targetRelativeHeight - heightTolerance) && isStableReading) {
+        // 🎯 최종 이륙 성공 판단: 높이 + 안정성 + 실제 이륙 패턴
+        final heightReached = heightGained >= (targetRelativeHeight - heightTolerance);
+        final overallSuccess = heightReached && isStableReading && isActualTakeoffPattern;
+        
+        if (overallSuccess) {
           final status = (isSuspiciousGain || isExcessiveGain) ? 'SUCCESS (sensor warning)' : 'SUCCESS';
           print('✅ TAKEOFF $status after $attempt attempts (gain: ${heightGained.toStringAsFixed(2)}m)');
           
-          if (isSuspiciousGain || isExcessiveGain) {
-            print('⚠️ 주의: 센서 데이터가 비정상적입니다. 드론이 실제로 이륚했는지 확인해주세요.');
-          }
-          
           state = state.copyWith(
-            lastCommand: isSuspiciousGain ? 'takeoff completed (sensor warning)' : 'takeoff completed successfully',
+            lastCommand: 'takeoff completed successfully',
             lastCommandTime: DateTime.now(),
           );
           return; // 성공! 완료
-        } else if (heightGained >= (targetRelativeHeight - heightTolerance) && !isStableReading) {
+          
+        } else if (heightReached && isStableReading && !isActualTakeoffPattern) {
+          print('💨 Height reached but likely due to propeller pressure, not actual takeoff');
+          print('   Pattern analysis indicates ground effect rather than sustained flight');
+          // 계속 재시도
+          
+        } else if (heightReached && !isStableReading) {
           print('⚠️ Height reached but readings unstable (variance: ${heightVariance.toStringAsFixed(4)}), continuing...');
+          
+        } else {
+          print('❌ Insufficient height gain for successful takeoff');
         }
         
         print('❌ Height not reached or unstable, need ${(targetRelativeHeight - heightGained).toStringAsFixed(2)}m more');
