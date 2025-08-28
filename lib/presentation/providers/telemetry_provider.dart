@@ -11,6 +11,8 @@ class TelemetryProviderState extends Equatable {
   final TelemetryData telemetryData;
   final String? statusMessage;
   final DateTime? lastUpdate;
+  final double loadingProgress; // TOC loading progress (0.0 to 1.0)
+  final String loadingStatus;   // Current loading status message
 
   const TelemetryProviderState({
     required this.isEnabled,
@@ -19,6 +21,8 @@ class TelemetryProviderState extends Equatable {
     required this.telemetryData,
     this.statusMessage,
     this.lastUpdate,
+    this.loadingProgress = 0.0,
+    this.loadingStatus = 'Initializing...',
   });
 
   factory TelemetryProviderState.initial() {
@@ -37,6 +41,8 @@ class TelemetryProviderState extends Equatable {
     TelemetryData? telemetryData,
     String? statusMessage,
     DateTime? lastUpdate,
+    double? loadingProgress,
+    String? loadingStatus,
   }) {
     return TelemetryProviderState(
       isEnabled: isEnabled ?? this.isEnabled,
@@ -45,6 +51,8 @@ class TelemetryProviderState extends Equatable {
       telemetryData: telemetryData ?? this.telemetryData,
       statusMessage: statusMessage ?? this.statusMessage,
       lastUpdate: lastUpdate ?? this.lastUpdate,
+      loadingProgress: loadingProgress ?? this.loadingProgress,
+      loadingStatus: loadingStatus ?? this.loadingStatus,
     );
   }
 
@@ -56,6 +64,8 @@ class TelemetryProviderState extends Equatable {
         telemetryData,
         statusMessage,
         lastUpdate,
+        loadingProgress,
+        loadingStatus,
       ];
 }
 
@@ -129,12 +139,23 @@ class TelemetryNotifier extends StateNotifier<TelemetryProviderState> {
     _logStatusCheckTimer = Timer.periodic(Duration(milliseconds: 200), (timer) {
       if (_logService != null) {
         final isLogInitialized = _logService!.isInitialized;
-        if (state.isLogInitialized != isLogInitialized) {
+        final loadingProgress = _logService!.tocLoadingProgress;
+        final loadingStatus = _logService!.loadingStatus;
+        
+        // Update state if anything changed
+        if (state.isLogInitialized != isLogInitialized || 
+            state.loadingProgress != loadingProgress ||
+            state.loadingStatus != loadingStatus) {
           state = state.copyWith(
             isLogInitialized: isLogInitialized,
+            loadingProgress: loadingProgress,
+            loadingStatus: loadingStatus,
             lastUpdate: DateTime.now(),
           );
-          print('LOG initialization state changed: $isLogInitialized');
+          
+          if (loadingProgress < 1.0) {
+            print('LOG loading progress: ${(loadingProgress * 100).toStringAsFixed(1)}% - $loadingStatus');
+          }
         }
       }
     });

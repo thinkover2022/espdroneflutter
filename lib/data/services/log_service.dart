@@ -101,6 +101,20 @@ class LogService {
   /// Whether telemetry logging is currently running
   bool get isRunning => _isRunning;
   
+  /// Get TOC loading progress (0.0 to 1.0)
+  double get tocLoadingProgress {
+    if (_logCount == 0) return 0.0;
+    if (_isTocDiscoveryComplete) return 1.0;
+    return _currentTocIndex / _logCount;
+  }
+  
+  /// Get current loading status message
+  String get loadingStatus {
+    if (_logCount == 0) return 'Initializing...';
+    if (_isTocDiscoveryComplete) return 'Ready';
+    return 'Loading $_currentTocIndex/$_logCount';
+  }
+  
   /// Initialize LOG system and request telemetry data
   Future<void> initialize() async {
     if (_isInitialized) {

@@ -4,6 +4,7 @@ import 'package:espdroneflutter/presentation/providers/high_level_commander_prov
 import 'package:espdroneflutter/presentation/providers/telemetry_provider.dart';
 import 'package:espdroneflutter/data/services/high_level_commander_service.dart';
 import 'package:espdroneflutter/utils/app_logger.dart';
+import 'package:espdroneflutter/presentation/widgets/progress_button.dart';
 
 class HighLevelControlsWidget extends ConsumerStatefulWidget {
   const HighLevelControlsWidget({super.key});
@@ -37,30 +38,29 @@ class _HighLevelControlsWidgetState extends ConsumerState<HighLevelControlsWidge
     final isLogReady = telemetryState.isLogInitialized;
     final hasHeightData = telemetryState.telemetryData.height != null;
     final isEnabled = isCommanderReady && isLogReady && hasHeightData;
+    final loadingProgress = telemetryState.loadingProgress;
+    final loadingStatus = telemetryState.loadingStatus;
     
     // Determine button label based on state
     String buttonLabel = 'Takeoff';
     if (!isLogReady) {
-      buttonLabel = 'LOG...';
+      buttonLabel = loadingStatus;
     } else if (!hasHeightData) {
-      buttonLabel = 'DATA...';
+      buttonLabel = 'Waiting...';
     }
 
     // 디버깅용 로그 출력
-    AppLogger.verbose(LogComponent.ui, 'Takeoff button - commander: $isCommanderReady, LOG: $isLogReady, height: $hasHeightData, enabled: $isEnabled');
+    AppLogger.verbose(LogComponent.ui, 'Takeoff button - commander: $isCommanderReady, LOG: $isLogReady, height: $hasHeightData, enabled: $isEnabled, progress: ${(loadingProgress * 100).toStringAsFixed(1)}%');
 
-    return ElevatedButton.icon(
+    return ProgressButton(
+      text: buttonLabel,
+      icon: Icons.flight_takeoff,
       onPressed: isEnabled ? _quickTakeoff : null,
-      icon: const Icon(Icons.flight_takeoff),
-      label: Text(buttonLabel),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isEnabled ? Colors.green : Colors.green.withOpacity(0.5),
-        foregroundColor: Colors.white,
-        disabledBackgroundColor: Colors.green.withOpacity(0.3),
-        disabledForegroundColor: Colors.white70,
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-        minimumSize: const Size(90, 36),
-      ),
+      progress: loadingProgress,
+      isEnabled: isEnabled,
+      color: Colors.green,
+      minimumSize: const Size(90, 36),
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
     );
   }
 
