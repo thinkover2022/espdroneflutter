@@ -267,18 +267,18 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
     final avgChangeRate = positiveChanges.isEmpty ? 0.0 : 
                          positiveChanges.fold(0.0, (a, b) => a + b) / positiveChanges.length;
     
-    // 3. 충분한 총 상승: 프로펠러 압력만으로는 0.15m 이상 지속 상승 어려움
+    // 3. 충분한 총 상승: 높은 추력으로 프로펠러 압력만으로는 0.2m 이상 지속 상승 어려움
     final totalRise = heightReadings.last - baselineHeight;
     
     // 프로펠러 압력 효과의 특징:
     // - 초기에 급격한 상승 후 안정화
     // - 불규칙한 변화 패턴
-    // - 0.05-0.1m 정도의 제한된 상승
+    // - 높은 추력에서도 0.1-0.15m 정도의 제한된 상승
     
-    final isGradualRise = maxChangeRate < 0.15; // 15cm/초 미만의 점진적 상승
+    final isGradualRise = maxChangeRate < 0.2; // 20cm/초 미만의 점진적 상승 (추력 증가로 기준 완화)
     final isSustainedRise = consecutiveRises >= 3; // 3번 이상 연속 상승
-    final isSufficientRise = totalRise > 0.15; // 15cm 이상 상승
-    final isStablePattern = avgChangeRate > 0.02 && avgChangeRate < 0.08; // 안정적인 상승 패턴
+    final isSufficientRise = totalRise > 0.2; // 20cm 이상 상승 (추력 증가에 따른 기준 상향)
+    final isStablePattern = avgChangeRate > 0.03 && avgChangeRate < 0.12; // 안정적인 상승 패턴 (범위 확장)
     
     print('📊 이륙 패턴 분석:');
     print('   연속 상승 횟수: $consecutiveRises/3 (${isSustainedRise ? "✅" : "❌"})');
@@ -311,7 +311,7 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
 
   // Convenience methods (require telemetry state to be passed from UI)
   Future<void> quickTakeoff(TelemetryProviderState telemetryState, Function() getCurrentTelemetryState) async {
-    const double targetRelativeHeight = 0.3; // 목표 상승 높이
+    const double targetRelativeHeight = 0.4; // 목표 상승 높이 (증가)
     const double heightTolerance = 0.05; // 허용 오차 5cm
     const int maxRetries = 5; // 최대 재시도 횟수
     
@@ -341,8 +341,8 @@ class HighLevelCommanderNotifier extends StateNotifier<HighLevelCommanderProvide
         
         print('Pre-takeoff height: ${preTakeoffHeight.toStringAsFixed(2)}m');
         
-        // takeoff2 실행 (duration 5초)
-        await takeoff2(telemetryState: preTakeoffState, duration: 5.0, relativeHeight: targetRelativeHeight);
+        // takeoff2 실행 (duration 6초 - 더 길게 하여 안정적인 이륙)
+        await takeoff2(telemetryState: preTakeoffState, duration: 6.0, relativeHeight: targetRelativeHeight);
         
         // takeoff2 명령 완료 대기 및 모니터링
         print('Waiting for takeoff2 completion and monitoring height changes...');

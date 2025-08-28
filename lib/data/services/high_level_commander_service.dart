@@ -26,11 +26,11 @@ class HighLevelCommandResponse {
 class HighLevelCommanderService {
   static const int allGroups = 0; // Group mask for all drones
   
-  // Default parameters
-  static const double defaultTakeoffHeight = 0.3; // 30cm
-  static const double defaultTakeoffDuration = 2.0; // 2 seconds
+  // Default parameters - optimized for reliable takeoff
+  static const double defaultTakeoffHeight = 0.4; // 40cm (increased for better clearance)
+  static const double defaultTakeoffDuration = 3.0; // 3 seconds (longer for stable takeoff)
   static const double defaultLandingHeight = 0.0; // Ground level
-  static const double defaultLandingDuration = 2.0; // 2 seconds
+  static const double defaultLandingDuration = 2.5; // 2.5 seconds (slightly longer for safe landing)
 
   final PacketSender _sendPacket;
   final StreamController<String> _responseController = StreamController<String>.broadcast();

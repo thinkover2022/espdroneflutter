@@ -63,7 +63,7 @@ class FlightControlNotifier extends StateNotifier<FlightData> {
   double _maxRollPitch = 20.0; // degrees
   double _maxYawRate = 200.0; // degrees/second
   double _maxThrust = 65535.0; // 16-bit max
-  double _minThrust = 20000.0; // Further increased minimum thrust for reliable takeoff
+  double _minThrust = 30000.0; // Increased minimum thrust for reliable takeoff (46% of max thrust)
 
   // Current control inputs
   double _currentRoll = 0.0;
