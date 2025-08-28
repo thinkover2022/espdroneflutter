@@ -32,7 +32,7 @@ class ProgressButton extends StatelessWidget {
       width: buttonWidth,
       height: buttonHeight,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: color.withOpacity(0.5),
           width: 1,
@@ -43,7 +43,7 @@ class ProgressButton extends StatelessWidget {
           // Background
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(19),
               color: color.withOpacity(0.1),
             ),
           ),
@@ -56,7 +56,7 @@ class ProgressButton extends StatelessWidget {
               width: (buttonWidth - 2) * progress.clamp(0.0, 1.0),
               child: Container(
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(19),
                   color: color.withOpacity(0.6),
                 ),
               ),
@@ -65,7 +65,7 @@ class ProgressButton extends StatelessWidget {
           if (isEnabled)
             Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(19),
                 color: color,
               ),
             ),
@@ -73,7 +73,7 @@ class ProgressButton extends StatelessWidget {
           Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(19),
               onTap: isEnabled ? onPressed : null,
               child: Container(
                 padding: padding,
